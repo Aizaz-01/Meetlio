@@ -1,0 +1,680 @@
+// Prisma Schema for Meetlio (SQLite Zero-Dependency Local Database)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  name                  String
+  email                 String                 @unique
+  passwordHash          String?
+  username              String                 @unique
+  timezone              String                 @default("UTC")
+  locale                String                 @default("en")
+  bio                   String?
+  avatarUrl             String?
+  image                 String?
+  defaultMinNotice      Int                    @default(120)
+  defaultMaxWindow      Int                    @default(60)
+  emailVerifiedAt       DateTime?
+  onboardingCompleted   Boolean                @default(false)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  ownedOrganizations    Organization[]         @relation("OrganizationOwner")
+  organizationMemberships OrganizationMember[]
+
+  eventTypes            EventType[]
+  availabilities        Availability[]
+  availabilitySchedules AvailabilitySchedule[]
+  eventTypeHosts        EventTypeHost[]
+  availabilityOverrides AvailabilityOverride[]
+  bookings              Booking[]              @relation("HostBookings")
+  calendarConnections   CalendarConnection[]
+  externalCalendarEvents ExternalCalendarEvent[]
+
+  contacts              Contact[]
+  contactLists          ContactList[]
+  payments              Payment[]
+  integrations          Integration[]
+  notifications         Notification[]
+  sessions              Session[]
+  passwordResetTokens   PasswordResetToken[]
+  webhookEndpoints      WebhookEndpoint[]
+  auditLogs             AuditLog[]
+  subscription          Subscription?
+  usageRecords          UsageRecord[]
+  workflows             Workflow[]
+  meetingPolls          MeetingPoll[]
+  routingForms          RoutingForm[]
+  bookingTags           BookingTag[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken String   @unique
+  token        String?  @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+model Organization {
+  id          String               @id @default(cuid())
+  name        String
+  slug        String               @unique
+  ownerId     String
+  owner       User                 @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  members     OrganizationMember[]
+  eventTypes  EventType[]
+  bookings    Booking[]
+  contacts    Contact[]
+  workflows   Workflow[]
+  routingForms RoutingForm[]
+  auditLogs   AuditLog[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("MEMBER")
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model AvailabilitySchedule {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  isDefault   Boolean  @default(false)
+  timezone    String   @default("UTC")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  availabilities Availability[]
+  eventTypes     EventType[]
+}
+
+model EventType {
+  id                   String                 @id @default(cuid())
+  userId               String
+  user                 User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId       String?
+  organization         Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  name                 String
+  title                String?
+  slug                 String
+  description          String?
+  duration             Int
+  color                String                 @default("#3b82f6")
+  kind                 String                 @default("ONE_ON_ONE")
+  eventKind            String                 @default("ONE_ON_ONE")
+  roundRobinStrategy   String                 @default("ROUND_ROBIN")
+  requireApproval      Boolean                @default(false)
+  maxAttendees         Int                    @default(1)
+  locationType         String
+  locationInfo         String?
+  locationValue        String?
+  isActive             Boolean                @default(true)
+  active               Boolean                @default(true)
+  isPrivate            Boolean                @default(false)
+  bookingPageTitle     String?
+  bookingPageDescription String?
+  bufferBefore         Int                    @default(0)
+  bufferAfter          Int                    @default(0)
+  minimumNotice        Int                    @default(120)
+  maximumBookingWindow Int                    @default(60)
+  maximumBookingDays   Int                    @default(60)
+  dailyMeetingLimit    Int?
+  cancellationPolicy   String?
+  confirmationMessage  String?
+  scheduleId           String?
+  schedule             AvailabilitySchedule?  @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  bookings             Booking[]
+  questions            EventBookingQuestion[]
+  hosts                EventTypeHost[]
+
+  @@unique([userId, slug])
+}
+
+model EventTypeHost {
+  id          String    @id @default(cuid())
+  eventTypeId String
+  eventType   EventType @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@unique([eventTypeId, userId])
+}
+
+model EventBookingQuestion {
+  id          String   @id @default(cuid())
+  eventTypeId String
+  eventType   EventType @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
+  label       String
+  type        String
+  options     String   @default("[]")
+  isRequired  Boolean  @default(false)
+  required    Boolean  @default(false)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  answers     BookingAnswer[]
+}
+
+model Availability {
+  id         String                @id @default(cuid())
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleId String?
+  schedule   AvailabilitySchedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int
+  startTime  String
+  endTime    String
+  isActive   Boolean               @default(true)
+}
+
+model AvailabilityOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  available Boolean  @default(false)
+  type      String   @default("UNAVAILABLE")
+  startTime String?
+  endTime   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id                 String                 @id @default(cuid())
+  userId             String
+  user               User                   @relation("HostBookings", fields: [userId], references: [id], onDelete: Cascade)
+  organizationId     String?
+  organization       Organization?          @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  eventTypeId        String
+  eventType          EventType              @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
+  guestName          String
+  inviteeName        String?
+  guestEmail         String
+  inviteeEmail       String?
+  guestPhone         String?
+  inviteePhone       String?
+  guestTimezone      String                 @default("UTC")
+  timezone           String                 @default("UTC")
+  startTime          DateTime
+  endTime            DateTime
+  status             String                 @default("CONFIRMED")
+  location           String?
+  attendance         String?
+  rejectionReason    String?
+  cancellationReason String?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancelToken        String?                @unique
+  rescheduleToken    String?                @unique
+  rescheduledFromId  String?
+  reminder24hSentAt  DateTime?
+  reminder1hSentAt   DateTime?
+  rescheduledAt      DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  rescheduledFrom    Booking?               @relation("BookingReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo      Booking[]              @relation("BookingReschedule")
+
+  payments           Payment[]
+  reminders          Reminder[]
+  notifications      Notification[]
+  answers            BookingAnswer[]
+  invitees           BookingInvitee[]
+  tags               BookingTagAssignment[]
+  workflowExecutions WorkflowExecution[]
+}
+
+model BookingInvitee {
+  id        String   @id @default(cuid())
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  email     String
+  createdAt DateTime @default(now())
+}
+
+model BookingAnswer {
+  id            String                @id @default(cuid())
+  bookingId     String
+  booking       Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  questionId    String?
+  question      EventBookingQuestion? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  questionLabel String
+  answer        String
+  value         String?
+}
+
+model CalendarConnection {
+  id                     String                  @id @default(cuid())
+  userId                 String
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider               String
+  email                  String?
+  externalAccountId      String?
+  providerAccountEmail   String?
+  calendarId             String?
+  accessToken            String?
+  refreshToken           String?
+  accessTokenEncrypted   String?
+  refreshTokenEncrypted  String?
+  expiresAt              DateTime?
+  active                 Boolean                 @default(true)
+  status                 String                  @default("CONNECTED")
+  lastSyncedAt           DateTime?
+  syncError              String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+
+  connectedCalendars     ConnectedCalendar[]
+  externalEvents         ExternalCalendarEvent[]
+
+  @@unique([userId, provider])
+}
+
+model ConnectedCalendar {
+  id                   String             @id @default(cuid())
+  calendarConnectionId String
+  calendarConnection   CalendarConnection @relation(fields: [calendarConnectionId], references: [id], onDelete: Cascade)
+  externalCalendarId   String
+  name                 String
+  readAvailability     Boolean            @default(true)
+  writeEvents          Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+}
+
+model ExternalCalendarEvent {
+  id           String              @id @default(cuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectionId String?
+  connection   CalendarConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  provider     String
+  externalId   String
+  title        String?
+  startTime    DateTime
+  endTime      DateTime
+  createdAt    DateTime            @default(now())
+}
+
+model Contact {
+  id             String               @id @default(cuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  name           String
+  email          String
+  phone          String?
+  company        String?
+  jobTitle       String?
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  activities     ContactActivity[]
+  listMemberships ContactListMember[]
+
+  @@unique([userId, email])
+}
+
+model ContactActivity {
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  type      String
+  metadata  String?
+  createdAt DateTime @default(now())
+}
+
+model ContactList {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  members   ContactListMember[]
+}
+
+model ContactListMember {
+  id            String      @id @default(cuid())
+  contactListId String
+  contactList   ContactList @relation(fields: [contactListId], references: [id], onDelete: Cascade)
+  contactId     String
+  contact       Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([contactListId, contactId])
+}
+
+model Workflow {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  name           String
+  active         Boolean             @default(true)
+  isActive       Boolean             @default(true)
+  trigger        String
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  actions        WorkflowAction[]
+  executions     WorkflowExecution[]
+}
+
+model WorkflowAction {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  actionType String   @default("EMAIL")
+  type       String   @default("SEND_EMAIL")
+  timing     String   @default("IMMEDIATE")
+  payload    String?
+  config     String?
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+}
+
+model WorkflowExecution {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  bookingId  String?
+  booking    Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  status     String
+  error      String?
+  executedAt DateTime @default(now())
+}
+
+model MeetingPoll {
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  duration      Int                 @default(30)
+  isFinalized   Boolean             @default(false)
+  finalizedSlot String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  options       MeetingPollOption[]
+  votes         MeetingPollVote[]
+}
+
+model MeetingPollOption {
+  id        String            @id @default(cuid())
+  pollId    String
+  poll      MeetingPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+
+  votes     MeetingPollVote[]
+}
+
+model MeetingPollVote {
+  id         String            @id @default(cuid())
+  pollId     String
+  poll       MeetingPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId   String
+  option     MeetingPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  voterName  String
+  voterEmail String
+  createdAt  DateTime          @default(now())
+
+  @@unique([pollId, optionId, voterEmail])
+}
+
+model RoutingForm {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  name           String
+  title          String?
+  slug           String            @default("form")
+  description    String?
+  active         Boolean           @default(true)
+  fields         String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  questions      RoutingQuestion[]
+  rules          RoutingRule[]
+}
+
+model RoutingQuestion {
+  id            String      @id @default(cuid())
+  routingFormId String
+  routingForm   RoutingForm @relation(fields: [routingFormId], references: [id], onDelete: Cascade)
+  label         String
+  type          String
+  options       String      @default("[]")
+  required      Boolean     @default(true)
+  order         Int         @default(0)
+  createdAt     DateTime    @default(now())
+}
+
+model RoutingRule {
+  id             String      @id @default(cuid())
+  routingFormId  String
+  routingForm    RoutingForm @relation(fields: [routingFormId], references: [id], onDelete: Cascade)
+  conditions     String?
+  conditionField String?
+  conditionValue String?
+  destinationType String
+  targetType     String?
+  destinationId  String?
+  targetValue    String?
+}
+
+model Payment {
+  id               String   @id @default(cuid())
+  bookingId        String?
+  booking          Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider         String
+  amount           Int
+  currency         String   @default("USD")
+  status           String
+  externalPaymentId String?
+  createdAt        DateTime @default(now())
+}
+
+model Integration {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String
+  settings  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reminderType  String
+  scheduledTime DateTime
+  status        String   @default("PENDING")
+  sentAt        DateTime?
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingId String?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  title     String?
+  body      String?
+  read      Boolean  @default(false)
+  type      String
+  recipient String   @default("HOST")
+  status    String   @default("UNREAD")
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+}
+
+model WebhookEndpoint {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      String            @default("[]")
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  deliveries  WebhookDelivery[]
+}
+
+model WebhookDelivery {
+  id           String          @id @default(cuid())
+  webhookId    String
+  webhook      WebhookEndpoint @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event        String
+  payload      String
+  status       String
+  responseCode Int?
+  attempts     Int             @default(1)
+  lastError    String?
+  createdAt    DateTime        @default(now())
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  action         String
+  entityType     String?
+  entityId       String?
+  metadata       String?
+  createdAt      DateTime      @default(now())
+}
+
+model Plan {
+  id                    String         @id @default(cuid())
+  name                  String
+  slug                  String         @unique
+  description           String?
+  priceMonthly          Int
+  priceYearly           Int
+  currency              String         @default("USD")
+  maxEventTypes         Int
+  maxBookingsPerMonth   Int
+  maxWebhooks           Int
+  analyticsEnabled      Boolean        @default(false)
+  customBrandingEnabled Boolean        @default(false)
+  prioritySupport       Boolean        @default(false)
+  isActive              Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  subscriptions         Subscription[]
+}
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  userId                 String    @unique
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan      @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                 String
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String?   @unique
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+}
+
+model UsageRecord {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month          String
+  bookingCount   Int      @default(0)
+  eventTypeCount Int      @default(0)
+  webhookCount   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, month])
+}
+
+model BookingTag {
+  id          String                 @id @default(cuid())
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  color       String                 @default("#3b82f6")
+  createdAt   DateTime               @default(now())
+
+  assignments BookingTagAssignment[]
+
+  @@unique([userId, name])
+}
+
+model BookingTagAssignment {
+  id        String     @id @default(cuid())
+  bookingId String
+  booking   Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       BookingTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, tagId])
+}
